@@ -30,6 +30,19 @@ app.get('/api/health', (req, res) => {
   res.json({ success: true, message: 'Two-step API is running' });
 });
 
+// Serve React client in production
+if (process.env.NODE_ENV === 'production') {
+  const clientBuildPath = path.join(__dirname, '..', 'client', 'dist');
+  app.use(express.static(clientBuildPath));
+
+  // All non-API routes serve the React app (SPA fallback)
+  app.get('*', (req, res) => {
+    if (!req.path.startsWith('/api') && !req.path.startsWith('/uploads')) {
+      res.sendFile(path.join(clientBuildPath, 'index.html'));
+    }
+  });
+}
+
 app.use(errorHandler);
 
 app.listen(PORT, () => {
