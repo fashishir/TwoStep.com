@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import HeroBanner from '../components/home/HeroBanner';
 import ProductCard from '../components/products/ProductCard';
 import { productsAPI } from '../services/api';
@@ -53,34 +54,34 @@ const Home = () => {
         <div className="container">
           <h2 className="heading heading--md home__section-title">Shop by Category</h2>
           <div className="home__categories-grid">
-            <a href="/products?category=men" className="home__category-card">
+            <Link to="/products?category=men" className="home__category-card">
               <div
                 className="home__category-image"
                 style={{ backgroundImage: 'url(https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=800&q=80)' }}
               />
               <span className="home__category-name">Men</span>
-            </a>
-            <a href="/products?category=women" className="home__category-card">
+            </Link>
+            <Link to="/products?category=women" className="home__category-card">
               <div
                 className="home__category-image"
                 style={{ backgroundImage: 'url(https://images.unsplash.com/photo-1539109136881-3be0616acf4b?w=800&q=80)' }}
               />
               <span className="home__category-name">Women</span>
-            </a>
-            <a href="/products?category=kids" className="home__category-card">
+            </Link>
+            <Link to="/products?category=kids" className="home__category-card">
               <div
                 className="home__category-image"
                 style={{ backgroundImage: 'url(https://images.unsplash.com/photo-1503944583220-79d8926ad5e2?w=800&q=80)' }}
               />
               <span className="home__category-name">Kids</span>
-            </a>
-            <a href="/products?category=sports" className="home__category-card">
+            </Link>
+            <Link to="/products?category=sports" className="home__category-card">
               <div
                 className="home__category-image"
                 style={{ backgroundImage: 'url(https://images.unsplash.com/photo-1461896836934-bd45ea8e2843?w=800&q=80)' }}
               />
               <span className="home__category-name">Sports</span>
-            </a>
+            </Link>
           </div>
         </div>
       </section>
