@@ -1,0 +1,47 @@
+.promo-bar {
+  background-color: #e4002b;
+  color: #ffffff;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &__content {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    max-width: 1536px;
+    padding: 0 16px;
+    position: relative;
+  }
+
+  &__text {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    text-align: center;
+
+    @media (min-width: 768px) {
+      font-size: 13px;
+    }
+  }
+
+  &__close {
+    position: absolute;
+    right: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #ffffff;
+    font-size: 20px;
+    line-height: 1;
+    padding: 4px;
+    opacity: 0.8;
+    transition: opacity 150ms ease;
+
+    &:hover {
+      opacity: 1;
+    }
+  }
+}
