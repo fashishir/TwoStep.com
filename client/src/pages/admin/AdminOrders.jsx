@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ordersAPI } from '../../services/api';
 import { formatPrice } from '../../utils/formatPrice';
-import { FiEye, FiX, FiPackage, FiTruck, FiCheck, FiPhone, FiMapPin, FiCalendar } from 'react-icons/fi';
+import { FiEye, FiX, FiPackage, FiTruck, FiCheck, FiPhone, FiMapPin, FiCalendar, FiUser } from 'react-icons/fi';
 import './AdminPages.scss';
 
 const AdminOrders = () => {
