@@ -12,7 +12,27 @@ const DB_PORT = process.env.DB_PORT || 5432;
 
 const RESET = process.argv.includes('--reset');
 
+function getTargetPoolConfig() {
+  if (process.env.DATABASE_URL) {
+    return {
+      connectionString: process.env.DATABASE_URL,
+      ssl: { rejectUnauthorized: false },
+    };
+  }
+  return {
+    user: DB_USER,
+    host: DB_HOST,
+    database: DB_NAME,
+    password: DB_PASSWORD,
+    port: DB_PORT,
+  };
+}
+
 async function createDatabaseIfNotExists() {
+  if (process.env.DATABASE_URL) {
+    console.log('DATABASE_URL set — skipping local database creation (managed Postgres).');
+    return;
+  }
   const adminPool = new Pool({
     user: DB_USER,
     host: DB_HOST,
@@ -169,13 +189,7 @@ async function initDB() {
     await createDatabaseIfNotExists();
 
     // Step 2: Connect to the target database
-    const pool = new Pool({
-      user: DB_USER,
-      host: DB_HOST,
-      database: DB_NAME,
-      password: DB_PASSWORD,
-      port: DB_PORT,
-    });
+    const pool = new Pool(getTargetPoolConfig());
 
     const client = await pool.connect();
 
