@@ -15,11 +15,31 @@ const generateTrackingId = () => {
   return `ORD-${segment(4)}-${segment(4)}`;
 };
 
+// Helper to build order items JSON with consistent camelCase field names
+const buildOrderItemsJson = (alias) => `
+  json_agg(json_build_object(
+    'id', ${alias}.id,
+    'productId', ${alias}.product_id,
+    'quantity', ${alias}.quantity,
+    'priceAtPurchase', ${alias}.price_at_purchase,
+    'productName', ${alias}.product_name,
+    'productImage', ${alias}.product_image
+  )) as items
+`;
+
+// Helper to normalize order rows (handle JSONB shipping_address)
+const normalizeOrder = (order) => {
+  if (!order) return order;
+  // shipping_address might be a JSONB object or a string
+  if (order.shipping_address && typeof order.shipping_address === 'object') {
+    order.shipping_address = order.shipping_address.address || order.shipping_address.street || JSON.stringify(order.shipping_address);
+  }
+  return order;
+};
+
 const createOrder = async (req, res) => {
   const { items, shippingAddress, shippingCity, shippingState, shippingZip, shippingCountry, notes } = req.body;
 
-  // Validate before opening a transaction so we never leave a connection
-  // with an open transaction in the pool.
   if (!items || items.length === 0) {
     return errorResponse(res, 'Order must contain at least one item', 400);
   }
@@ -81,11 +101,14 @@ const createOrder = async (req, res) => {
       isUnique = existing.rows.length === 0;
     }
 
+    // Store shipping_address as JSONB
+    const shippingAddressJson = JSON.stringify({ address: shippingAddress });
+
     const orderResult = await client.query(
       `INSERT INTO orders (user_id, tracking_id, total_amount, shipping_address, shipping_city, shipping_state, shipping_zip, shipping_country, notes, payment_method)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'cash_on_delivery')
+       VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, 'cash_on_delivery')
        RETURNING *`,
-      [req.user.id, trackingId, totalAmount, shippingAddress, shippingCity, shippingState, shippingZip, shippingCountry || 'United States', notes]
+      [req.user.id, trackingId, totalAmount, shippingAddressJson, shippingCity, shippingState, shippingZip, shippingCountry || 'United States', notes]
     );
 
     const order = orderResult.rows[0];
@@ -98,8 +121,6 @@ const createOrder = async (req, res) => {
       );
     }
 
-    // Log initial status to history inside the same transaction so the
-    // order and its first history entry are committed atomically.
     await client.query(
       `INSERT INTO order_status_history (order_id, status, note) VALUES ($1, 'pending', 'Order placed')`,
       [order.id]
@@ -109,10 +130,7 @@ const createOrder = async (req, res) => {
 
     const fullOrder = await pool.query(
       `SELECT o.*, 
-        json_agg(json_build_object(
-          'id', oi.id, 'productId', oi.product_id, 'quantity', oi.quantity,
-          'priceAtPurchase', oi.price_at_purchase, 'productName', oi.product_name, 'productImage', oi.product_image
-        )) as items
+        ${buildOrderItemsJson('oi')}
        FROM orders o
        LEFT JOIN order_items oi ON o.id = oi.order_id
        WHERE o.id = $1
@@ -120,7 +138,7 @@ const createOrder = async (req, res) => {
       [order.id]
     );
 
-    successResponse(res, fullOrder.rows[0], 'Order placed successfully', 201);
+    successResponse(res, normalizeOrder(fullOrder.rows[0]), 'Order placed successfully', 201);
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Create order error:', error);
@@ -138,10 +156,7 @@ const getOrders = async (req, res) => {
     let query = `
       SELECT o.*, 
         u.email as user_email, u.first_name, u.last_name,
-        json_agg(json_build_object(
-          'id', oi.id, 'productId', oi.product_id, 'quantity', oi.quantity,
-          'priceAtPurchase', oi.price_at_purchase, 'productName', oi.product_name, 'productImage', oi.product_image
-        )) as items
+        ${buildOrderItemsJson('oi')}
       FROM orders o
       LEFT JOIN users u ON o.user_id = u.id
       LEFT JOIN order_items oi ON o.id = oi.order_id
@@ -185,7 +200,8 @@ const getOrders = async (req, res) => {
 
     const result = await pool.query(query, params);
 
-    paginatedResponse(res, result.rows, total, page, limit);
+    const orders = result.rows.map(normalizeOrder);
+    paginatedResponse(res, orders, total, page, limit);
   } catch (error) {
     console.error('Get orders error:', error);
     errorResponse(res, 'Failed to fetch orders', 500);
@@ -198,10 +214,7 @@ const getOrderById = async (req, res) => {
 
     const result = await pool.query(
       `SELECT o.*, u.email as user_email, u.first_name, u.last_name,
-        json_agg(json_build_object(
-          'id', oi.id, 'productId', oi.product_id, 'quantity', oi.quantity,
-          'priceAtPurchase', oi.price_at_purchase, 'productName', oi.product_name, 'productImage', oi.product_image
-        )) as items
+        ${buildOrderItemsJson('oi')}
        FROM orders o
        LEFT JOIN users u ON o.user_id = u.id
        LEFT JOIN order_items oi ON o.id = oi.order_id
@@ -220,7 +233,7 @@ const getOrderById = async (req, res) => {
       return errorResponse(res, 'Access denied', 403);
     }
 
-    successResponse(res, order);
+    successResponse(res, normalizeOrder(order));
   } catch (error) {
     console.error('Get order error:', error);
     errorResponse(res, 'Failed to fetch order', 500);
@@ -271,7 +284,6 @@ const updateOrderStatus = async (req, res) => {
       updateParams
     );
 
-    // Log to status history
     await pool.query(
       `INSERT INTO order_status_history (order_id, status, note, tracking_number, carrier)
        VALUES ($1, $2, $3, $4, $5)`,
@@ -352,10 +364,7 @@ const getOrderByTrackingId = async (req, res) => {
       `SELECT o.id, o.tracking_id, o.status, o.tracking_number, o.carrier, o.estimated_delivery,
               o.delivered_at, o.created_at, o.updated_at, o.total_amount,
               o.shipping_address, o.shipping_city, o.shipping_state, o.shipping_zip, o.shipping_country,
-              json_agg(json_build_object(
-                'productName', oi.product_name, 'quantity', oi.quantity,
-                'priceAtPurchase', oi.price_at_purchase, 'productImage', oi.product_image
-              )) as items
+              ${buildOrderItemsJson('oi')}
        FROM orders o
        LEFT JOIN order_items oi ON o.id = oi.order_id
        WHERE o.tracking_id = $1
@@ -376,7 +385,7 @@ const getOrderByTrackingId = async (req, res) => {
     );
 
     successResponse(res, {
-      ...result.rows[0],
+      ...normalizeOrder(result.rows[0]),
       history: history.rows,
     });
   } catch (error) {
