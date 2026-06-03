@@ -46,6 +46,15 @@ const Account = () => {
     cancelled: { label: 'Cancelled', color: '#ef4444', bg: '#fee2e2' },
   };
 
+  // Normalize item field names (handle both camelCase and lowercase)
+  const normalizeItem = (item) => ({
+    id: item.id,
+    productName: item.productName || item.productname || 'Unknown Product',
+    productImage: item.productImage || item.productimage || null,
+    quantity: item.quantity || 0,
+    priceAtPurchase: item.priceAtPurchase || item.priceatpurchase || 0,
+  });
+
   if (!isAuthenticated) {
     return null;
   }
@@ -109,11 +118,15 @@ const Account = () => {
                   <div className="account__orders-list">
                     {orders.map((order) => {
                       const status = statusConfig[order.status] || statusConfig.pending;
+                      const normalizedItems = (order.items || []).map(normalizeItem);
                       return (
                         <div key={order.id} className="account__order-card">
                           <div className="account__order-header">
                             <div>
                               <span className="account__order-id">Order #{order.id}</span>
+                              {order.tracking_id && (
+                                <span className="account__order-tracking"> • {order.tracking_id}</span>
+                              )}
                               <span className="account__order-date">
                                 {new Date(order.created_at).toLocaleDateString('en-US', {
                                   year: 'numeric',
@@ -131,23 +144,23 @@ const Account = () => {
                           </div>
 
                           <div className="account__order-items">
-                            {order.items?.slice(0, 3).map((item, idx) => (
-                              <div key={idx} className="account__order-item">
+                            {normalizedItems.slice(0, 3).map((item, idx) => (
+                              <div key={item.id || idx} className="account__order-item">
                                 <div className="account__order-item-image">
-                                  {item.productimage ? (
-                                    <img src={item.productimage} alt={item.productname} />
+                                  {item.productImage ? (
+                                    <img src={item.productImage} alt={item.productName} />
                                   ) : (
                                     <div className="account__order-item-placeholder">No Image</div>
                                   )}
                                 </div>
                                 <div className="account__order-item-details">
-                                  <p className="account__order-item-name">{item.productname}</p>
+                                  <p className="account__order-item-name">{item.productName}</p>
                                   <p className="account__order-item-qty">Qty: {item.quantity}</p>
                                 </div>
                               </div>
                             ))}
-                            {order.items?.length > 3 && (
-                              <p className="account__order-more">+{order.items.length - 3} more items</p>
+                            {normalizedItems.length > 3 && (
+                              <p className="account__order-more">+{normalizedItems.length - 3} more items</p>
                             )}
                           </div>
 
@@ -192,11 +205,11 @@ const Account = () => {
                   <div className="account__profile-row">
                     <span className="account__profile-label">Member Since</span>
                     <span className="account__profile-value">
-                      {new Date(user?.createdAt).toLocaleDateString('en-US', {
+                      {user?.createdAt ? new Date(user.createdAt).toLocaleDateString('en-US', {
                         year: 'numeric',
                         month: 'long',
                         day: 'numeric',
-                      })}
+                      }) : 'N/A'}
                     </span>
                   </div>
                 </div>
