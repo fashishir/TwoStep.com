@@ -16,19 +16,21 @@ const generateTrackingId = () => {
 };
 
 const createOrder = async (req, res) => {
+  const { items, shippingAddress, shippingCity, shippingState, shippingZip, shippingCountry, notes } = req.body;
+
+  // Validate before opening a transaction so we never leave a connection
+  // with an open transaction in the pool.
+  if (!items || items.length === 0) {
+    return errorResponse(res, 'Order must contain at least one item', 400);
+  }
+
+  if (!shippingAddress || !shippingCity || !shippingState || !shippingZip) {
+    return errorResponse(res, 'Shipping address is required', 400);
+  }
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-
-    const { items, shippingAddress, shippingCity, shippingState, shippingZip, shippingCountry, notes } = req.body;
-
-    if (!items || items.length === 0) {
-      return errorResponse(res, 'Order must contain at least one item', 400);
-    }
-
-    if (!shippingAddress || !shippingCity || !shippingState || !shippingZip) {
-      return errorResponse(res, 'Shipping address is required', 400);
-    }
 
     let totalAmount = 0;
     const orderItems = [];
@@ -83,7 +85,7 @@ const createOrder = async (req, res) => {
       `INSERT INTO orders (user_id, tracking_id, total_amount, shipping_address, shipping_city, shipping_state, shipping_zip, shipping_country, notes, payment_method)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'cash_on_delivery')
        RETURNING *`,
-      [req.user.id, trackingId, totalAmount, JSON.stringify(shippingAddress), shippingCity, shippingState, shippingZip, shippingCountry || 'United States', notes]
+      [req.user.id, trackingId, totalAmount, shippingAddress, shippingCity, shippingState, shippingZip, shippingCountry || 'United States', notes]
     );
 
     const order = orderResult.rows[0];
@@ -96,13 +98,14 @@ const createOrder = async (req, res) => {
       );
     }
 
-    await client.query('COMMIT');
-
-    // Log initial status to history
-    await pool.query(
+    // Log initial status to history inside the same transaction so the
+    // order and its first history entry are committed atomically.
+    await client.query(
       `INSERT INTO order_status_history (order_id, status, note) VALUES ($1, 'pending', 'Order placed')`,
       [order.id]
     );
+
+    await client.query('COMMIT');
 
     const fullOrder = await pool.query(
       `SELECT o.*, 

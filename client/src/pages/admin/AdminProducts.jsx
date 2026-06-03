@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { productsAPI, categoriesAPI } from '../../services/api';
 import { formatPrice } from '../../utils/formatPrice';
-import { FiPlus, FiEdit2, FiTrash2, FiX } from 'react-icons/fi';
+import { FiPlus, FiEdit2, FiTrash2, FiX, FiImage } from 'react-icons/fi';
 import './AdminPages.scss';
 
 const AdminProducts = () => {
@@ -24,21 +24,14 @@ const AdminProducts = () => {
   });
   const [images, setImages] = useState([]);
   const [imagePreviews, setImagePreviews] = useState([]);
+  const [removedImageIds, setRemovedImageIds] = useState([]);
 
   useEffect(() => {
     fetchProducts();
     fetchCategories();
   }, [pagination.page]);
 
-  useEffect(() => {
-    return () => {
-      imagePreviews.forEach(p => {
-        if (!p.isExisting) URL.revokeObjectURL(p.url);
-      });
-    };
-  }, [imagePreviews]);
-
-  const fetchProducts = async () => {
+  const fetchProducts = useCallback(async () => {
     try {
       const response = await productsAPI.getAll({ page: pagination.page, limit: 10 });
       if (response.data.success) {
@@ -50,7 +43,7 @@ const AdminProducts = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [pagination.page]);
 
   const fetchCategories = async () => {
     try {
@@ -63,37 +56,39 @@ const AdminProducts = () => {
     }
   };
 
+  const resetForm = () => {
+    setEditingProduct(null);
+    setFormData({
+      name: '', description: '', price: '', salePrice: '',
+      sku: '', stockQuantity: '', categoryId: '', isFeatured: false,
+    });
+    setImages([]);
+    setImagePreviews([]);
+    setRemovedImageIds([]);
+  };
+
   const handleOpenModal = (product = null) => {
     if (product) {
       setEditingProduct(product);
       setFormData({
         name: product.name || '',
         description: product.description || '',
-        price: product.price,
+        price: product.price || '',
         salePrice: product.sale_price || '',
         sku: product.sku || '',
-        stockQuantity: product.stock_quantity,
-        categoryId: product.category_id,
-        isFeatured: product.is_featured,
+        stockQuantity: product.stock_quantity || '',
+        categoryId: product.category_id || '',
+        isFeatured: product.is_featured || false,
       });
       const existingPreviews = (product.images || []).map(img => ({
+        id: img.id,
         url: img.image_url,
         isExisting: true,
       }));
       setImagePreviews(existingPreviews);
+      setRemovedImageIds([]);
     } else {
-      setEditingProduct(null);
-      setFormData({
-        name: '',
-        description: '',
-        price: '',
-        salePrice: '',
-        sku: '',
-        stockQuantity: '',
-        categoryId: '',
-        isFeatured: false,
-      });
-      setImagePreviews([]);
+      resetForm();
     }
     setImages([]);
     setShowModal(true);
@@ -101,37 +96,37 @@ const AdminProducts = () => {
 
   const handleCloseModal = () => {
     setShowModal(false);
-    setEditingProduct(null);
-    setFormData({
-      name: '',
-      description: '',
-      price: '',
-      salePrice: '',
-      sku: '',
-      stockQuantity: '',
-      categoryId: '',
-      isFeatured: false,
-    });
-    setImages([]);
-    setImagePreviews([]);
+    resetForm();
   };
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setFormData({
-      ...formData,
-      [name]: type === 'checkbox' ? checked : value,
-    });
+    setFormData(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
   };
 
   const handleImageChange = (e) => {
     const newFiles = Array.from(e.target.files);
-    setImages(newFiles);
+    if (newFiles.length === 0) return;
+    setImages(prev => [...prev, ...newFiles]);
     const newPreviews = newFiles.map(file => ({
       url: URL.createObjectURL(file),
       isExisting: false,
     }));
-    setImagePreviews(prev => [...prev.filter(p => p.isExisting), ...newPreviews]);
+    setImagePreviews(prev => [...prev, ...newPreviews]);
+  };
+
+  const handleRemoveImage = (index) => {
+    const preview = imagePreviews[index];
+    if (preview.isExisting && preview.id) {
+      setRemovedImageIds(prev => [...prev, preview.id]);
+    } else if (!preview.isExisting) {
+      // Revoke object URL to prevent memory leak
+      URL.revokeObjectURL(preview.url);
+      // Also remove from images array if it's a new file
+      const newIndex = imagePreviews.slice(0, index).filter(p => !p.isExisting).length;
+      setImages(prev => prev.filter((_, i) => i !== newIndex));
+    }
+    setImagePreviews(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleSubmit = async (e) => {
@@ -154,11 +149,15 @@ const AdminProducts = () => {
       data.append('stockQuantity', formData.stockQuantity || '0');
       data.append('categoryId', formData.categoryId);
       data.append('isFeatured', String(formData.isFeatured));
+
       images.forEach((image) => {
         data.append('images', image);
       });
 
       if (editingProduct) {
+        if (removedImageIds.length > 0) {
+          data.append('removedImageIds', JSON.stringify(removedImageIds));
+        }
         await productsAPI.update(editingProduct.id, data);
       } else {
         await productsAPI.create(data);
@@ -186,9 +185,7 @@ const AdminProducts = () => {
     }
   };
 
-  if (loading) {
-    return <div className="loading" />;
-  }
+  if (loading) return <div className="loading" />;
 
   return (
     <div className="admin-page">
@@ -196,11 +193,12 @@ const AdminProducts = () => {
         <h2>Products ({pagination.total})</h2>
         <button className="btn btn--primary" onClick={() => handleOpenModal()}>
           <FiPlus size={18} />
-          Add Product
+          <span className="admin-page__btn-text">Add Product</span>
         </button>
       </div>
 
-      <div className="admin-page__table-wrapper">
+      {/* Desktop Table */}
+      <div className="admin-page__table-wrapper admin-page__table-wrapper--desktop">
         <table className="admin-page__table">
           <thead>
             <tr>
@@ -214,62 +212,120 @@ const AdminProducts = () => {
             </tr>
           </thead>
           <tbody>
-            {products.map((product) => (
-              <tr key={product.id}>
-                <td>
-                  <div className="admin-page__image">
-                    {product.images?.[0]?.image_url ? (
-                      <img src={product.images[0].image_url} alt={product.name} />
-                    ) : (
-                      <div className="admin-page__no-image">No Image</div>
-                    )}
-                  </div>
-                </td>
-                <td>{product.name}</td>
-                <td>{product.category_name}</td>
-                <td>
-                  {product.sale_price ? (
-                    <>
-                      <span className="admin-page__sale-price">{formatPrice(product.sale_price)}</span>
-                      <span className="admin-page__original-price">{formatPrice(product.price)}</span>
-                    </>
-                  ) : (
-                    formatPrice(product.price)
-                  )}
-                </td>
-                <td>
-                  <span className={`admin-page__stock ${product.stock_quantity === 0 ? 'admin-page__stock--out' : ''}`}>
-                    {product.stock_quantity}
-                  </span>
-                </td>
-                <td>{product.is_featured ? 'Yes' : 'No'}</td>
-                <td>
-                  <div className="admin-page__actions">
-                    <button onClick={() => handleOpenModal(product)} className="admin-page__action-btn">
-                      <FiEdit2 size={16} />
-                    </button>
-                    <button onClick={() => handleDelete(product.id)} className="admin-page__action-btn admin-page__action-btn--delete">
-                      <FiTrash2 size={16} />
-                    </button>
-                  </div>
+            {products.length === 0 ? (
+              <tr>
+                <td colSpan="7" style={{ textAlign: 'center', padding: '32px', color: '#757575' }}>
+                  No products found. Click "Add Product" to create one.
                 </td>
               </tr>
-            ))}
+            ) : (
+              products.map((product) => (
+                <tr key={product.id}>
+                  <td>
+                    <div className="admin-page__image">
+                      {product.images?.[0]?.image_url ? (
+                        <img src={product.images[0].image_url} alt={product.name} />
+                      ) : (
+                        <div className="admin-page__no-image"><FiImage size={16} /></div>
+                      )}
+                    </div>
+                  </td>
+                  <td><strong>{product.name}</strong></td>
+                  <td>{product.category_name || '-'}</td>
+                  <td>
+                    {product.sale_price ? (
+                      <>
+                        <span className="admin-page__sale-price">{formatPrice(product.sale_price)}</span>{' '}
+                        <span className="admin-page__original-price">{formatPrice(product.price)}</span>
+                      </>
+                    ) : (
+                      formatPrice(product.price)
+                    )}
+                  </td>
+                  <td>
+                    <span className={`admin-page__stock ${product.stock_quantity === 0 ? 'admin-page__stock--out' : ''}`}>
+                      {product.stock_quantity}
+                    </span>
+                  </td>
+                  <td>{product.is_featured ? 'Yes' : 'No'}</td>
+                  <td>
+                    <div className="admin-page__actions">
+                      <button onClick={() => handleOpenModal(product)} className="admin-page__action-btn" title="Edit">
+                        <FiEdit2 size={16} />
+                      </button>
+                      <button onClick={() => handleDelete(product.id)} className="admin-page__action-btn admin-page__action-btn--delete" title="Delete">
+                        <FiTrash2 size={16} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
 
+      {/* Mobile Card List */}
+      <div className="admin-page__card-list">
+        {products.length === 0 ? (
+          <div className="admin-page__empty">
+            <p>No products found. Click "Add Product" to create one.</p>
+          </div>
+        ) : (
+          products.map((product) => (
+            <div key={product.id} className="admin-product-card">
+              <div className="admin-product-card__image">
+                {product.images?.[0]?.image_url ? (
+                  <img src={product.images[0].image_url} alt={product.name} />
+                ) : (
+                  <div className="admin-product-card__no-image"><FiImage size={24} /></div>
+                )}
+              </div>
+              <div className="admin-product-card__info">
+                <h3 className="admin-product-card__name">{product.name}</h3>
+                <p className="admin-product-card__category">{product.category_name || '-'}</p>
+                <div className="admin-product-card__details">
+                  <span className="admin-product-card__price">
+                    {product.sale_price ? (
+                      <>
+                        <span className="admin-page__sale-price">{formatPrice(product.sale_price)}</span>{' '}
+                        <span className="admin-page__original-price">{formatPrice(product.price)}</span>
+                      </>
+                    ) : (
+                      formatPrice(product.price)
+                    )}
+                  </span>
+                  <span className={`admin-product-card__stock ${product.stock_quantity === 0 ? 'admin-product-card__stock--out' : ''}`}>
+                    Stock: {product.stock_quantity}
+                  </span>
+                </div>
+                {product.is_featured && <span className="admin-product-card__featured">Featured</span>}
+              </div>
+              <div className="admin-product-card__actions">
+                <button onClick={() => handleOpenModal(product)} className="admin-page__action-btn" title="Edit">
+                  <FiEdit2 size={16} />
+                </button>
+                <button onClick={() => handleDelete(product.id)} className="admin-page__action-btn admin-page__action-btn--delete" title="Delete">
+                  <FiTrash2 size={16} />
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Pagination */}
       {pagination.pages > 1 && (
         <div className="admin-page__pagination">
           <button
-            onClick={() => setPagination({ ...pagination, page: pagination.page - 1 })}
+            onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
             disabled={pagination.page === 1}
           >
             Previous
           </button>
           <span>Page {pagination.page} of {pagination.pages}</span>
           <button
-            onClick={() => setPagination({ ...pagination, page: pagination.page + 1 })}
+            onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
             disabled={pagination.page === pagination.pages}
           >
             Next
@@ -277,6 +333,7 @@ const AdminProducts = () => {
         </div>
       )}
 
+      {/* Modal */}
       {showModal && (
         <div className="admin-modal">
           <div className="admin-modal__overlay" onClick={submitting ? undefined : handleCloseModal} />
@@ -291,88 +348,39 @@ const AdminProducts = () => {
             <form onSubmit={handleSubmit} className="admin-modal__form">
               <div className="admin-modal__field">
                 <label>Name *</label>
-                <input
-                  type="text"
-                  name="name"
-                  value={formData.name}
-                  onChange={handleChange}
-                  required
-                  disabled={submitting}
-                />
+                <input type="text" name="name" value={formData.name} onChange={handleChange} required disabled={submitting} />
               </div>
 
               <div className="admin-modal__field">
                 <label>Description</label>
-                <textarea
-                  name="description"
-                  value={formData.description}
-                  onChange={handleChange}
-                  rows={3}
-                  disabled={submitting}
-                />
+                <textarea name="description" value={formData.description} onChange={handleChange} rows={3} disabled={submitting} />
               </div>
 
               <div className="admin-modal__row">
                 <div className="admin-modal__field">
                   <label>Price *</label>
-                  <input
-                    type="number"
-                    name="price"
-                    value={formData.price}
-                    onChange={handleChange}
-                    step="0.01"
-                    required
-                    disabled={submitting}
-                  />
+                  <input type="number" name="price" value={formData.price} onChange={handleChange} step="0.01" required disabled={submitting} />
                 </div>
-
                 <div className="admin-modal__field">
                   <label>Sale Price</label>
-                  <input
-                    type="number"
-                    name="salePrice"
-                    value={formData.salePrice}
-                    onChange={handleChange}
-                    step="0.01"
-                    disabled={submitting}
-                  />
+                  <input type="number" name="salePrice" value={formData.salePrice} onChange={handleChange} step="0.01" disabled={submitting} />
                 </div>
               </div>
 
               <div className="admin-modal__row">
                 <div className="admin-modal__field">
                   <label>SKU</label>
-                  <input
-                    type="text"
-                    name="sku"
-                    value={formData.sku}
-                    onChange={handleChange}
-                    disabled={submitting}
-                  />
+                  <input type="text" name="sku" value={formData.sku} onChange={handleChange} disabled={submitting} />
                 </div>
-
                 <div className="admin-modal__field">
                   <label>Stock Quantity *</label>
-                  <input
-                    type="number"
-                    name="stockQuantity"
-                    value={formData.stockQuantity}
-                    onChange={handleChange}
-                    required
-                    disabled={submitting}
-                  />
+                  <input type="number" name="stockQuantity" value={formData.stockQuantity} onChange={handleChange} required disabled={submitting} />
                 </div>
               </div>
 
               <div className="admin-modal__field">
                 <label>Category *</label>
-                <select
-                  name="categoryId"
-                  value={formData.categoryId}
-                  onChange={handleChange}
-                  required
-                  disabled={submitting}
-                >
+                <select name="categoryId" value={formData.categoryId} onChange={handleChange} required disabled={submitting}>
                   <option value="">Select Category</option>
                   {categories.map((cat) => (
                     <option key={cat.id} value={cat.id}>{cat.name}</option>
@@ -382,18 +390,20 @@ const AdminProducts = () => {
 
               <div className="admin-modal__field">
                 <label>Images</label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  onChange={handleImageChange}
-                  disabled={submitting}
-                />
+                <input type="file" accept="image/*" multiple onChange={handleImageChange} disabled={submitting} />
                 {imagePreviews.length > 0 && (
                   <div className="admin-modal__image-previews">
                     {imagePreviews.map((preview, index) => (
                       <div key={index} className="admin-modal__image-preview">
                         <img src={preview.url} alt={`Preview ${index + 1}`} />
+                        <button
+                          type="button"
+                          className="admin-modal__image-remove"
+                          onClick={() => handleRemoveImage(index)}
+                          disabled={submitting}
+                        >
+                          <FiX size={12} />
+                        </button>
                       </div>
                     ))}
                   </div>
@@ -401,13 +411,7 @@ const AdminProducts = () => {
               </div>
 
               <label className="admin-modal__checkbox">
-                <input
-                  type="checkbox"
-                  name="isFeatured"
-                  checked={formData.isFeatured}
-                  onChange={handleChange}
-                  disabled={submitting}
-                />
+                <input type="checkbox" name="isFeatured" checked={formData.isFeatured} onChange={handleChange} disabled={submitting} />
                 Featured Product
               </label>
 

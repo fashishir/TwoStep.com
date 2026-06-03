@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
@@ -23,6 +23,14 @@ const Checkout = () => {
 
   const shippingCost = subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : SHIPPING_COST;
   const total = subtotal + shippingCost;
+
+  // Redirect to the cart if there is nothing to check out. Done in an effect
+  // rather than during render to avoid React state-update-during-render warnings.
+  useEffect(() => {
+    if (items.length === 0) {
+      navigate('/cart');
+    }
+  }, [items.length, navigate]);
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -62,7 +70,6 @@ const Checkout = () => {
   };
 
   if (items.length === 0) {
-    navigate('/cart');
     return null;
   }
 

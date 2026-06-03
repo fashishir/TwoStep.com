@@ -1,12 +1,21 @@
 import axios from 'axios';
 
+const API_URL = import.meta.env.VITE_API_URL || '/api';
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || '/api',
+  baseURL: API_URL,
   withCredentials: true,
+  headers: {
+    'Content-Type': 'application/json',
+  },
 });
 
 api.interceptors.request.use(
   (config) => {
+    // Don't set Content-Type for FormData - let the browser set it with boundary
+    if (config.data instanceof FormData) {
+      delete config.headers['Content-Type'];
+    }
     return config;
   },
   (error) => {
@@ -26,7 +35,10 @@ api.interceptors.response.use(
         await api.post('/auth/refresh-token');
         return api(originalRequest);
       } catch (refreshError) {
-        window.location.href = '/login';
+        // Only redirect if not already on login page
+        if (!window.location.pathname.includes('/login')) {
+          window.location.href = '/login';
+        }
         return Promise.reject(refreshError);
       }
     }
@@ -40,6 +52,7 @@ export const authAPI = {
   login: (data) => api.post('/auth/login', data),
   logout: () => api.post('/auth/logout'),
   getMe: () => api.get('/auth/me'),
+  refreshToken: () => api.post('/auth/refresh-token'),
 };
 
 export const productsAPI = {
@@ -64,7 +77,7 @@ export const ordersAPI = {
   create: (data) => api.post('/orders', data),
   getAll: (params) => api.get('/orders', { params }),
   getById: (id) => api.get(`/orders/${id}`),
-  updateStatus: (id, status) => api.put(`/orders/${id}/status`, { status }),
+  updateStatus: (id, status, note) => api.put(`/orders/${id}/status`, { status, note }),
   updatePayment: (id, paymentStatus) => api.put(`/orders/${id}/payment`, { paymentStatus }),
   getStats: () => api.get('/orders/stats'),
   getTrack: (trackingId) => api.get(`/orders/track/${trackingId}`),

@@ -197,7 +197,7 @@ const createProduct = async (req, res) => {
 const updateProduct = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, description, price, salePrice, sku, stockQuantity, categoryId, isFeatured, is_active, filters } = req.body;
+    const { name, description, price, salePrice, sku, stockQuantity, categoryId, isFeatured, is_active, filters, removedImageIds } = req.body;
 
     const existing = await pool.query('SELECT id, name, slug FROM products WHERE id = $1', [id]);
     if (existing.rows.length === 0) {
@@ -225,15 +225,45 @@ const updateProduct = async (req, res) => {
 
     const product = result.rows[0];
 
+    // Handle image removals selectively instead of deleting all images
+    if (removedImageIds) {
+      let idsToRemove = [];
+      try {
+        idsToRemove = typeof removedImageIds === 'string' ? JSON.parse(removedImageIds) : removedImageIds;
+      } catch (e) {
+        console.error('Failed to parse removedImageIds:', e);
+      }
+      if (Array.isArray(idsToRemove) && idsToRemove.length > 0) {
+        await pool.query(
+          'DELETE FROM product_images WHERE product_id = $1 AND id = ANY($2)',
+          [id, idsToRemove]
+        );
+      }
+    }
+
+    // Add new images without deleting existing ones
     if (req.files && req.files.length > 0) {
-      await pool.query('DELETE FROM product_images WHERE product_id = $1', [id]);
+      // Get current max sort order
+      const maxOrderResult = await pool.query(
+        'SELECT COALESCE(MAX(sort_order), -1) as max_order FROM product_images WHERE product_id = $1',
+        [id]
+      );
+      let sortOrder = parseInt(maxOrderResult.rows[0].max_order) + 1;
+
+      // Check if any existing image is marked as primary
+      const primaryCheck = await pool.query(
+        'SELECT COUNT(*) as cnt FROM product_images WHERE product_id = $1 AND is_primary = true',
+        [id]
+      );
+      const hasExistingPrimary = parseInt(primaryCheck.rows[0].cnt) > 0;
+
       for (let i = 0; i < req.files.length; i++) {
         const file = req.files[i];
         const imageUrl = `/uploads/products/${file.filename}`;
         await pool.query(
           `INSERT INTO product_images (product_id, image_url, public_id, alt_text, is_primary, sort_order)
            VALUES ($1, $2, $3, $4, $5, $6)`,
-          [id, imageUrl, file.filename, updatedName, i === 0, i]
+          [id, imageUrl, file.filename, updatedName, !hasExistingPrimary && i === 0, sortOrder + i]
         );
       }
     }

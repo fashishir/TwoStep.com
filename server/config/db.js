@@ -22,9 +22,11 @@ const poolConfig = process.env.DATABASE_URL
 
 const pool = new Pool(poolConfig);
 
+// Log idle-client errors but do not crash the process. node-postgres discards
+// the broken client and creates a fresh one on the next checkout, so a single
+// transient connection failure should not take down the whole server.
 pool.on('error', (err) => {
-  console.error('Unexpected error on idle client', err);
-  process.exit(-1);
+  console.error('Unexpected error on idle PostgreSQL client:', err);
 });
 
 module.exports = pool;

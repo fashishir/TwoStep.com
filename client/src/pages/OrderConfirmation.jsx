@@ -20,17 +20,28 @@ const OrderConfirmation = () => {
           setError('Order not found');
         }
       } catch (err) {
-        setError('Failed to load order details');
+        console.error('Failed to fetch order:', err);
+        setError(err.response?.data?.message || 'Failed to load order details');
       } finally {
         setLoading(false);
       }
     };
 
-    fetchOrder();
+    if (orderId) {
+      fetchOrder();
+    }
   }, [orderId]);
 
   if (loading) {
-    return <div className="loading" />;
+    return (
+      <div className="order-confirmation">
+        <div className="container">
+          <div className="loading" style={{ minHeight: '400px' }}>
+            <p style={{ marginTop: '16px', color: '#757575' }}>Loading order details...</p>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   if (error || !order) {
@@ -38,10 +49,23 @@ const OrderConfirmation = () => {
       <div className="order-confirmation">
         <div className="container">
           <div className="order-confirmation__error">
+            <div className="order-confirmation__error-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
+            </div>
             <h2>{error || 'Order not found'}</h2>
-            <Link to="/products" className="btn btn--primary">
-              Continue Shopping
-            </Link>
+            <p>The order you're looking for doesn't exist or may have been removed.</p>
+            <div className="order-confirmation__error-actions">
+              <Link to="/products" className="btn btn--primary">
+                Continue Shopping
+              </Link>
+              <Link to="/track-order" className="btn btn--secondary">
+                Track Another Order
+              </Link>
+            </div>
           </div>
         </div>
       </div>
@@ -58,6 +82,15 @@ const OrderConfirmation = () => {
 
   const status = statusConfig[order.status] || statusConfig.pending;
 
+  // Normalize items - handle both camelCase and lowercase field names
+  const items = (order.items || []).map(item => ({
+    id: item.id,
+    productName: item.productName || item.productname || 'Unknown Product',
+    productImage: item.productImage || item.productimage || null,
+    quantity: item.quantity,
+    priceAtPurchase: item.priceAtPurchase || item.priceatpurchase || 0,
+  }));
+
   return (
     <div className="order-confirmation">
       <div className="container">
@@ -67,10 +100,15 @@ const OrderConfirmation = () => {
               <path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </div>
-          <h1 className="order-confirmation__title">Order Confirmed</h1>
+          <h1 className="order-confirmation__title">Order Confirmed!</h1>
           <p className="order-confirmation__subtitle">
-            Thank you for your purchase! Your order has been placed.
+            Thank you for your purchase. Your order has been placed successfully.
           </p>
+          {order.tracking_id && (
+            <p className="order-confirmation__tracking">
+              Tracking ID: <strong>{order.tracking_id}</strong>
+            </p>
+          )}
         </div>
 
         <div className="order-confirmation__layout">
@@ -99,10 +137,10 @@ const OrderConfirmation = () => {
             </div>
 
             <div className="order-confirmation__section">
-              <h2>Items</h2>
+              <h2>Items ({items.length})</h2>
               <div className="order-confirmation__items">
-                {order.items?.map((item) => (
-                  <div key={item.id} className="order-confirmation__item">
+                {items.map((item, index) => (
+                  <div key={item.id || index} className="order-confirmation__item">
                     <div className="order-confirmation__item-image">
                       {item.productImage ? (
                         <img src={item.productImage} alt={item.productName} />
@@ -132,6 +170,13 @@ const OrderConfirmation = () => {
                 {order.shipping_country}
               </p>
             </div>
+
+            {order.notes && (
+              <div className="order-confirmation__section">
+                <h2>Order Notes</h2>
+                <p className="order-confirmation__address">{order.notes}</p>
+              </div>
+            )}
           </div>
 
           <div className="order-confirmation__sidebar">
@@ -144,7 +189,7 @@ const OrderConfirmation = () => {
               </div>
               <div className="order-confirmation__summary-row">
                 <span>Shipping</span>
-                <span>Free</span>
+                <span className="order-confirmation__free-shipping">Free</span>
               </div>
               <div className="order-confirmation__summary-row order-confirmation__summary-row--total">
                 <span>Total</span>
@@ -156,8 +201,17 @@ const OrderConfirmation = () => {
                 <p>Cash on Delivery</p>
               </div>
 
+              <div className="order-confirmation__payment">
+                <h3>Payment Status</h3>
+                <p style={{ textTransform: 'capitalize' }}>{order.payment_status || 'Pending'}</p>
+              </div>
+
               <Link to="/products" className="btn btn--primary btn--full">
                 Continue Shopping
+              </Link>
+
+              <Link to="/track-order" className="btn btn--secondary btn--full" style={{ marginTop: '12px' }}>
+                Track Your Order
               </Link>
             </div>
           </div>
