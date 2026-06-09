@@ -1,17 +1,44 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useLocation, useSearchParams } from 'react-router-dom';
 import { ordersAPI } from '../services/api';
 import { formatPrice } from '../utils/formatPrice';
 import './OrderConfirmation.scss';
 
 const OrderConfirmation = () => {
   const { orderId } = useParams();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
     const fetchOrder = async () => {
+      const stateOrder = location.state?.orderData;
+      const trackingId = searchParams.get('tracking');
+
+      if (stateOrder) {
+        setOrder(stateOrder);
+        setLoading(false);
+        return;
+      }
+
+      if (trackingId) {
+        try {
+          const trackResponse = await ordersAPI.getTrack(trackingId);
+          if (trackResponse.data.success) {
+            setOrder(trackResponse.data.data);
+          } else {
+            setError('Order not found');
+          }
+        } catch {
+          setError('Failed to load order details');
+        } finally {
+          setLoading(false);
+        }
+        return;
+      }
+
       try {
         const response = await ordersAPI.getById(orderId);
         if (response.data.success) {
@@ -20,7 +47,6 @@ const OrderConfirmation = () => {
           setError('Order not found');
         }
       } catch (err) {
-        console.error('Failed to fetch order:', err);
         setError(err.response?.data?.message || 'Failed to load order details');
       } finally {
         setLoading(false);
@@ -30,7 +56,7 @@ const OrderConfirmation = () => {
     if (orderId) {
       fetchOrder();
     }
-  }, [orderId]);
+  }, [orderId, location.state, searchParams]);
 
   if (loading) {
     return (

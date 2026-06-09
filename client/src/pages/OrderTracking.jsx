@@ -45,6 +45,15 @@ const OrderTracking = () => {
     return statusSteps.indexOf(status);
   };
 
+  // Normalize item field names
+  const normalizeItem = (item) => ({
+    id: item.id,
+    productName: item.productName || item.productname || 'Unknown Product',
+    productImage: item.productImage || item.productimage || null,
+    quantity: item.quantity || 0,
+    priceAtPurchase: item.priceAtPurchase || item.priceatpurchase || 0,
+  });
+
   return (
     <div className="order-tracking">
       <div className="container">
@@ -167,24 +176,27 @@ const OrderTracking = () => {
             <div className="order-tracking__items-card">
               <h3>Order Items</h3>
               <div className="order-tracking__items">
-                {order.items?.map((item, idx) => (
-                  <div key={idx} className="order-tracking__item">
-                    <div className="order-tracking__item-image">
-                      {item.productimage ? (
-                        <img src={item.productimage} alt={item.productname} />
-                      ) : (
-                        <div className="order-tracking__item-placeholder">No Image</div>
-                      )}
+                {(order.items || []).map((item, idx) => {
+                  const normalized = normalizeItem(item);
+                  return (
+                    <div key={normalized.id || idx} className="order-tracking__item">
+                      <div className="order-tracking__item-image">
+                        {normalized.productImage ? (
+                          <img src={normalized.productImage} alt={normalized.productName} />
+                        ) : (
+                          <div className="order-tracking__item-placeholder">No Image</div>
+                        )}
+                      </div>
+                      <div className="order-tracking__item-details">
+                        <p className="order-tracking__item-name">{normalized.productName}</p>
+                        <p className="order-tracking__item-qty">Qty: {normalized.quantity}</p>
+                      </div>
+                      <p className="order-tracking__item-price">
+                        {formatPrice(normalized.priceAtPurchase * normalized.quantity)}
+                      </p>
                     </div>
-                    <div className="order-tracking__item-details">
-                      <p className="order-tracking__item-name">{item.productname}</p>
-                      <p className="order-tracking__item-qty">Qty: {item.quantity}</p>
-                    </div>
-                    <p className="order-tracking__item-price">
-                      {formatPrice(item.priceatpurchase * item.quantity)}
-                    </p>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
               <div className="order-tracking__total">
                 <span>Total</span>

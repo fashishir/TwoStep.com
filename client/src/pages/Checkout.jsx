@@ -1,14 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
-import { useAuth } from '../context/AuthContext';
 import { ordersAPI } from '../services/api';
 import { formatPrice, FREE_SHIPPING_THRESHOLD, SHIPPING_COST } from '../utils/formatPrice';
 import './Checkout.scss';
 
 const Checkout = () => {
   const { items, subtotal, clearCart } = useCart();
-  const { user } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -58,7 +56,9 @@ const Checkout = () => {
       const response = await ordersAPI.create(orderData);
       if (response.data.success) {
         clearCart();
-        navigate(`/order-confirmation/${response.data.data.id}`);
+        navigate(`/order-confirmation/${response.data.data.id}?tracking=${response.data.data.tracking_id}`, {
+          state: { orderData: response.data.data },
+        });
       } else {
         setError(response.data.message);
       }

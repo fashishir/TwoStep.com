@@ -1,13 +1,11 @@
 import { Link } from 'react-router-dom';
 import { useCart } from '../../context/CartContext';
-import { useAuth } from '../../context/AuthContext';
 import { formatPrice } from '../../utils/formatPrice';
 import { FiX, FiTrash2 } from 'react-icons/fi';
 import './CartDrawer.scss';
 
 const CartDrawer = () => {
   const { items, removeItem, updateQuantity, isCartOpen, toggleCart, subtotal } = useCart();
-  const { isAuthenticated } = useAuth();
 
   if (!isCartOpen) return null;
 
@@ -93,15 +91,9 @@ const CartDrawer = () => {
               <p className="cart-drawer__shipping-note">
                 Shipping calculated at checkout. Cash on Delivery available.
               </p>
-              {isAuthenticated ? (
-                <Link to="/checkout" className="btn btn--primary btn--full" onClick={toggleCart}>
-                  Proceed to Checkout
-                </Link>
-              ) : (
-                <Link to="/login" className="btn btn--primary btn--full" onClick={toggleCart}>
-                  Login to Checkout
-                </Link>
-              )}
+              <Link to="/checkout" className="btn btn--primary btn--full" onClick={toggleCart}>
+                Proceed to Checkout
+              </Link>
               <Link to="/products" className="cart-drawer__continue" onClick={toggleCart}>
                 Continue Shopping
               </Link>

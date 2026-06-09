@@ -108,7 +108,7 @@ const createOrder = async (req, res) => {
       `INSERT INTO orders (user_id, tracking_id, total_amount, shipping_address, shipping_city, shipping_state, shipping_zip, shipping_country, notes, payment_method)
        VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, 'cash_on_delivery')
        RETURNING *`,
-      [req.user.id, trackingId, totalAmount, shippingAddressJson, shippingCity, shippingState, shippingZip, shippingCountry || 'United States', notes]
+       [req.user?.id || null, trackingId, totalAmount, shippingAddressJson, shippingCity, shippingState, shippingZip, shippingCountry || 'United States', notes]
     );
 
     const order = orderResult.rows[0];

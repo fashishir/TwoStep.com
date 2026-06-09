@@ -72,7 +72,7 @@ CREATE TABLE IF NOT EXISTS orders (
   payment_method VARCHAR(50) DEFAULT 'cash_on_delivery',
   payment_status VARCHAR(20) DEFAULT 'pending' CHECK (payment_status IN ('pending', 'paid', 'failed', 'refunded')),
   total_amount DECIMAL(10,2) NOT NULL,
-  shipping_address JSONB NOT NULL,
+  shipping_address TEXT NOT NULL,
   shipping_city VARCHAR(100),
   shipping_state VARCHAR(100),
   shipping_zip VARCHAR(20),
