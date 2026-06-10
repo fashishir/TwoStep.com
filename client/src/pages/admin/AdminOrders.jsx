@@ -10,10 +10,39 @@ const AdminOrders = () => {
   const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 });
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [statusFilter, setStatusFilter] = useState('');
+  const [shippingForm, setShippingForm] = useState({
+    shippingAddress: '',
+    shippingCity: '',
+    shippingState: '',
+    shippingZip: '',
+    shippingCountry: '',
+  });
 
   useEffect(() => {
     fetchOrders();
   }, [pagination.page, statusFilter]);
+
+  useEffect(() => {
+    if (!selectedOrder) return;
+
+    // shipping_address in API may come as:
+    // - string (already address)
+    // - object { address: string }
+    // - JSON string
+    let addressText = selectedOrder.shipping_address;
+
+    if (addressText && typeof addressText === 'object') {
+      addressText = addressText.address || addressText.street || JSON.stringify(addressText);
+    }
+
+    setShippingForm({
+      shippingAddress: addressText || '',
+      shippingCity: selectedOrder.shipping_city || '',
+      shippingState: selectedOrder.shipping_state || '',
+      shippingZip: selectedOrder.shipping_zip || '',
+      shippingCountry: selectedOrder.shipping_country || '',
+    });
+  }, [selectedOrder]);
 
   const fetchOrders = useCallback(async () => {
     setLoading(true);
@@ -56,6 +85,42 @@ const AdminOrders = () => {
     } catch (error) {
       console.error('Failed to update payment status:', error);
       alert('Failed to update payment status');
+    }
+  };
+
+  const handleShippingSave = async () => {
+    try {
+      const orderId = selectedOrder?.id;
+      if (!orderId) return;
+
+      const payload = {
+        shippingAddress: shippingForm.shippingAddress,
+        shippingCity: shippingForm.shippingCity,
+        shippingState: shippingForm.shippingState,
+        shippingZip: shippingForm.shippingZip,
+        shippingCountry: shippingForm.shippingCountry || 'United States',
+      };
+
+      await ordersAPI.updateShipping(orderId, payload);
+
+      // Refresh list and update current modal values
+      await fetchOrders();
+      setSelectedOrder((prev) => {
+        if (!prev || prev.id !== orderId) return prev;
+        return {
+          ...prev,
+          shipping_address: payload.shippingAddress,
+          shipping_city: payload.shippingCity,
+          shipping_state: payload.shippingState,
+          shipping_zip: payload.shippingZip,
+          shipping_country: payload.shippingCountry,
+        };
+      });
+
+      alert('Shipping saved');
+    } catch (error) {
+      console.error('Failed to save shipping:', error);
+      alert('Failed to save shipping');
     }
   };
 
@@ -300,9 +365,79 @@ const AdminOrders = () => {
               {/* Shipping Address */}
               <div className="admin-order__section">
                 <h4><FiMapPin size={14} /> Shipping Address</h4>
-                <p>{selectedOrder.shipping_address}</p>
-                <p>{selectedOrder.shipping_city}, {selectedOrder.shipping_state} {selectedOrder.shipping_zip}</p>
-                <p>{selectedOrder.shipping_country}</p>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px' }}>
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#757575', display: 'block', marginBottom: '6px' }}>
+                      Address
+                    </label>
+                    <input
+                      value={shippingForm.shippingAddress}
+                      onChange={(e) => setShippingForm((prev) => ({ ...prev, shippingAddress: e.target.value }))}
+                      className="admin-page__input"
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <div>
+                      <label style={{ fontSize: '12px', color: '#757575', display: 'block', marginBottom: '6px' }}>
+                        City
+                      </label>
+                      <input
+                        value={shippingForm.shippingCity}
+                        onChange={(e) => setShippingForm((prev) => ({ ...prev, shippingCity: e.target.value }))}
+                        className="admin-page__input"
+                        style={{ width: '100%' }}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: '12px', color: '#757575', display: 'block', marginBottom: '6px' }}>
+                        State
+                      </label>
+                      <input
+                        value={shippingForm.shippingState}
+                        onChange={(e) => setShippingForm((prev) => ({ ...prev, shippingState: e.target.value }))}
+                        className="admin-page__input"
+                        style={{ width: '100%' }}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <div>
+                      <label style={{ fontSize: '12px', color: '#757575', display: 'block', marginBottom: '6px' }}>
+                        Zip
+                      </label>
+                      <input
+                        value={shippingForm.shippingZip}
+                        onChange={(e) => setShippingForm((prev) => ({ ...prev, shippingZip: e.target.value }))}
+                        className="admin-page__input"
+                        style={{ width: '100%' }}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: '12px', color: '#757575', display: 'block', marginBottom: '6px' }}>
+                        Country
+                      </label>
+                      <input
+                        value={shippingForm.shippingCountry}
+                        onChange={(e) => setShippingForm((prev) => ({ ...prev, shippingCountry: e.target.value }))}
+                        className="admin-page__input"
+                        style={{ width: '100%' }}
+                        placeholder="United States"
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    <button onClick={handleShippingSave} className="btn btn--primary btn--sm">
+                      Save Shipping
+                    </button>
+                  </div>
+                </div>
               </div>
 
               {/* Items */}

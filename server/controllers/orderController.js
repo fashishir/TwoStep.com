@@ -108,7 +108,7 @@ const createOrder = async (req, res) => {
       `INSERT INTO orders (user_id, tracking_id, total_amount, shipping_address, shipping_city, shipping_state, shipping_zip, shipping_country, notes, payment_method)
        VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, 'cash_on_delivery')
        RETURNING *`,
-       [req.user?.id || null, trackingId, totalAmount, shippingAddressJson, shippingCity, shippingState, shippingZip, shippingCountry || 'United States', notes]
+      [req.user?.id || null, trackingId, totalAmount, shippingAddressJson, shippingCity, shippingState, shippingZip, shippingCountry || 'United States', notes]
     );
 
     const order = orderResult.rows[0];
@@ -307,6 +307,55 @@ const updateOrderStatus = async (req, res) => {
   }
 };
 
+const updateOrderShipping = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      shippingAddress,
+      shippingCity,
+      shippingState,
+      shippingZip,
+      shippingCountry,
+    } = req.body;
+
+    if (!shippingAddress || !shippingCity || !shippingState || !shippingZip) {
+      return errorResponse(res, 'Shipping address, city, state, and zip are required', 400);
+    }
+
+    const existing = await pool.query('SELECT id FROM orders WHERE id = $1', [id]);
+    if (existing.rows.length === 0) {
+      return errorResponse(res, 'Order not found', 404);
+    }
+
+    const shippingAddressJson = JSON.stringify({ address: shippingAddress });
+
+    const result = await pool.query(
+      `UPDATE orders
+       SET shipping_address = $1::jsonb,
+           shipping_city = $2,
+           shipping_state = $3,
+           shipping_zip = $4,
+           shipping_country = $5,
+           updated_at = NOW()
+       WHERE id = $6
+       RETURNING *`,
+      [
+        shippingAddressJson,
+        shippingCity,
+        shippingState,
+        shippingZip,
+        shippingCountry || 'United States',
+        id,
+      ]
+    );
+
+    successResponse(res, normalizeOrder(result.rows[0]), 'Shipping updated');
+  } catch (error) {
+    console.error('Update order shipping error:', error);
+    errorResponse(res, 'Failed to update shipping', 500);
+  }
+};
+
 const updatePaymentStatus = async (req, res) => {
   try {
     const { id } = req.params;
@@ -427,6 +476,7 @@ module.exports = {
   getOrders,
   getOrderById,
   updateOrderStatus,
+  updateOrderShipping,
   updatePaymentStatus,
   getOrderStats,
   getOrderByTrackingId,

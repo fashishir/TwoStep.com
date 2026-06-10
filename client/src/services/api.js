@@ -79,6 +79,7 @@ export const ordersAPI = {
   getById: (id) => api.get(`/orders/${id}`),
   updateStatus: (id, status, note) => api.put(`/orders/${id}/status`, { status, note }),
   updatePayment: (id, paymentStatus) => api.put(`/orders/${id}/payment`, { paymentStatus }),
+  updateShipping: (id, data) => api.put(`/orders/${id}/shipping`, data),
   getStats: () => api.get('/orders/stats'),
   getTrack: (trackingId) => api.get(`/orders/track/${trackingId}`),
   getHistory: (id) => api.get(`/orders/${id}/history`),
