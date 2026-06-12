@@ -74,6 +74,7 @@ const ProductCard = ({ product }) => {
 
       <div className="product-card__info">
         <h3 className="product-card__name">{product.name}</h3>
+
         <div className="product-card__pricing">
           {hasDiscount ? (
             <>
@@ -88,6 +89,28 @@ const ProductCard = ({ product }) => {
             <span className="product-card__price">{formatPrice(product.price)}</span>
           )}
         </div>
+
+        {Array.isArray(product.filters) && product.filters.length > 0 && (
+          <div className="product-card__sizes">
+            {product.filters
+              .filter((f) => f.filter_key === 'size')
+              .map((f) => f.filter_value)
+              .filter(Boolean)
+              .join(', ')
+              .trim() ? (
+              <>
+                <span className="product-card__sizes-label">Sizes:</span>{' '}
+                <span className="product-card__sizes-values">
+                  {product.filters
+                    .filter((f) => f.filter_key === 'size')
+                    .map((f) => f.filter_value)
+                    .filter(Boolean)
+                    .join(', ')}
+                </span>
+              </>
+            ) : null}
+          </div>
+        )}
       </div>
     </Link>
   );
