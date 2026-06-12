@@ -22,6 +22,8 @@ const AdminProducts = () => {
     categoryId: '',
     isFeatured: false,
   });
+
+  const [sizes, setSizes] = useState(['']);
   const [images, setImages] = useState([]);
   const [imagePreviews, setImagePreviews] = useState([]);
   const [removedImageIds, setRemovedImageIds] = useState([]);
@@ -65,6 +67,7 @@ const AdminProducts = () => {
     setImages([]);
     setImagePreviews([]);
     setRemovedImageIds([]);
+    setSizes(['']);
   };
 
   const handleOpenModal = (product = null) => {
@@ -80,6 +83,7 @@ const AdminProducts = () => {
         categoryId: product.category_id || '',
         isFeatured: product.is_featured || false,
       });
+
       const existingPreviews = (product.images || []).map(img => ({
         id: img.id,
         url: img.image_url,
@@ -87,6 +91,12 @@ const AdminProducts = () => {
       }));
       setImagePreviews(existingPreviews);
       setRemovedImageIds([]);
+
+      const extractedSizes = (product.filters || [])
+        .filter((f) => f.filter_key === 'size' && f.filter_value)
+        .map((f) => String(f.filter_value));
+
+      setSizes(extractedSizes.length ? extractedSizes : ['']);
     } else {
       resetForm();
     }
@@ -149,6 +159,13 @@ const AdminProducts = () => {
       data.append('stockQuantity', formData.stockQuantity || '0');
       data.append('categoryId', formData.categoryId);
       data.append('isFeatured', String(formData.isFeatured));
+
+      const normalizedSizes = (sizes || [])
+        .map((s) => String(s || '').trim())
+        .filter(Boolean);
+
+      const filtersPayload = normalizedSizes.map((s) => ({ key: 'size', value: s }));
+      data.append('filters', JSON.stringify(filtersPayload));
 
       images.forEach((image) => {
         data.append('images', image);
@@ -375,6 +392,56 @@ const AdminProducts = () => {
                 <div className="admin-modal__field">
                   <label>Stock Quantity *</label>
                   <input type="number" name="stockQuantity" value={formData.stockQuantity} onChange={handleChange} required disabled={submitting} />
+                </div>
+              </div>
+
+              <div className="admin-modal__field">
+                <label>Sizes</label>
+                <div className="admin-modal__sizes">
+                  {sizes.map((size, index) => (
+                    <div key={`${index}-${size}`} className="admin-modal__size-row">
+                      <input
+                        type="text"
+                        placeholder={index === 0 ? 'e.g., S' : 'e.g., M'}
+                        value={size}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setSizes((prev) => {
+                            const next = [...prev];
+                            next[index] = value;
+                            return next;
+                          });
+                        }}
+                        disabled={submitting}
+                      />
+                      {sizes.length > 1 && (
+                        <button
+                          type="button"
+                          className="admin-modal__size-remove"
+                          onClick={() => {
+                            setSizes((prev) => {
+                              const next = prev.filter((_, i) => i !== index);
+                              return next.length ? next : [''];
+                            });
+                          }}
+                          disabled={submitting}
+                          title="Remove size"
+                        >
+                          <FiX size={12} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+
+                  <button
+                    type="button"
+                    className="btn btn--secondary"
+                    onClick={() => setSizes((prev) => [...prev, ''])}
+                    disabled={submitting}
+                    style={{ marginTop: '8px' }}
+                  >
+                    <FiPlus size={16} /> Add size
+                  </button>
                 </div>
               </div>
 

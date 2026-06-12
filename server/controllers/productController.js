@@ -76,20 +76,38 @@ const getProducts = async (req, res) => {
 
     const products = result.rows;
     if (products.length > 0) {
-      const productIds = products.map(p => p.id);
+      const productIds = products.map((p) => p.id);
+
       const imagesResult = await pool.query(
         `SELECT * FROM product_images WHERE product_id = ANY($1) ORDER BY sort_order, is_primary DESC`,
         [productIds]
       );
       const imagesByProduct = {};
       for (const img of imagesResult.rows) {
-        if (!imagesByProduct[img.product_id]) {
-          imagesByProduct[img.product_id] = [];
-        }
+        if (!imagesByProduct[img.product_id]) imagesByProduct[img.product_id] = [];
         imagesByProduct[img.product_id].push(img);
       }
+
+      const filtersResult = await pool.query(
+        `SELECT id, product_id, filter_key, filter_value
+         FROM product_filters
+         WHERE product_id = ANY($1)
+         ORDER BY product_id, filter_key, filter_value`,
+        [productIds]
+      );
+      const filtersByProduct = {};
+      for (const f of filtersResult.rows) {
+        if (!filtersByProduct[f.product_id]) filtersByProduct[f.product_id] = [];
+        filtersByProduct[f.product_id].push({
+          id: f.id,
+          filter_key: f.filter_key,
+          filter_value: f.filter_value,
+        });
+      }
+
       for (const product of products) {
         product.images = imagesByProduct[product.id] || [];
+        product.filters = filtersByProduct[product.id] || [];
       }
     }
 
@@ -147,6 +165,15 @@ const createProduct = async (req, res) => {
       return errorResponse(res, 'Name, price, and category are required', 400);
     }
 
+    let parsedFilters = filters;
+    if (typeof filters === 'string') {
+      try {
+        parsedFilters = JSON.parse(filters);
+      } catch (e) {
+        parsedFilters = [];
+      }
+    }
+
     const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
     const result = await pool.query(
@@ -170,11 +197,12 @@ const createProduct = async (req, res) => {
       }
     }
 
-    if (filters && Array.isArray(filters)) {
-      for (const filter of filters) {
+    if (parsedFilters && Array.isArray(parsedFilters)) {
+      for (const filter of parsedFilters) {
+        if (!filter?.key || filter?.value === undefined || filter?.value === null) continue;
         await pool.query(
-          'INSERT INTO product_filters (product_id, filter_key, filter_value) VALUES ($1, $2, $3)',
-          [product.id, filter.key, filter.value]
+          'INSERT INTO product_filters (product_id, filter_key, filter_value) VALUES ($1, $2, $3) ON CONFLICT (product_id, filter_key, filter_value) DO NOTHING',
+          [product.id, filter.key, String(filter.value)]
         );
       }
     }
@@ -198,6 +226,15 @@ const updateProduct = async (req, res) => {
   try {
     const { id } = req.params;
     const { name, description, price, salePrice, sku, stockQuantity, categoryId, isFeatured, is_active, filters, removedImageIds } = req.body;
+
+    let parsedFilters = filters;
+    if (typeof filters === 'string') {
+      try {
+        parsedFilters = JSON.parse(filters);
+      } catch (e) {
+        parsedFilters = [];
+      }
+    }
 
     const existing = await pool.query('SELECT id, name, slug FROM products WHERE id = $1', [id]);
     if (existing.rows.length === 0) {
@@ -268,12 +305,13 @@ const updateProduct = async (req, res) => {
       }
     }
 
-    if (filters && Array.isArray(filters)) {
+    if (parsedFilters && Array.isArray(parsedFilters)) {
       await pool.query('DELETE FROM product_filters WHERE product_id = $1', [id]);
-      for (const filter of filters) {
+      for (const filter of parsedFilters) {
+        if (!filter?.key || filter?.value === undefined || filter?.value === null) continue;
         await pool.query(
-          'INSERT INTO product_filters (product_id, filter_key, filter_value) VALUES ($1, $2, $3)',
-          [id, filter.key, filter.value]
+          'INSERT INTO product_filters (product_id, filter_key, filter_value) VALUES ($1, $2, $3) ON CONFLICT (product_id, filter_key, filter_value) DO NOTHING',
+          [id, filter.key, String(filter.value)]
         );
       }
     }
@@ -319,12 +357,39 @@ const getFeaturedProducts = async (req, res) => {
     );
 
     const products = result.rows;
+
+    const productIds = products.map((p) => p.id);
+
+    const imagesResult = await pool.query(
+      `SELECT * FROM product_images WHERE product_id = ANY($1) ORDER BY sort_order, is_primary DESC`,
+      [productIds]
+    );
+    const imagesByProduct = {};
+    for (const img of imagesResult.rows) {
+      if (!imagesByProduct[img.product_id]) imagesByProduct[img.product_id] = [];
+      imagesByProduct[img.product_id].push(img);
+    }
+
+    const filtersResult = await pool.query(
+      `SELECT id, product_id, filter_key, filter_value
+       FROM product_filters
+       WHERE product_id = ANY($1)
+       ORDER BY product_id, filter_key, filter_value`,
+      [productIds]
+    );
+    const filtersByProduct = {};
+    for (const f of filtersResult.rows) {
+      if (!filtersByProduct[f.product_id]) filtersByProduct[f.product_id] = [];
+      filtersByProduct[f.product_id].push({
+        id: f.id,
+        filter_key: f.filter_key,
+        filter_value: f.filter_value,
+      });
+    }
+
     for (const product of products) {
-      const imagesResult = await pool.query(
-        'SELECT * FROM product_images WHERE product_id = $1 ORDER BY sort_order, is_primary DESC',
-        [product.id]
-      );
-      product.images = imagesResult.rows;
+      product.images = imagesByProduct[product.id] || [];
+      product.filters = filtersByProduct[product.id] || [];
     }
 
     successResponse(res, products);
